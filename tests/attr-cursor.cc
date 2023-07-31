@@ -27,21 +27,13 @@ main( int argc, char * argv[], char ** envp )
   nix::evalSettings.pureEval     = true; 
   nix::evalSettings.useEvalCache = true;
   nix::ref<nix::Store>     store = nix::ref<nix::Store>( nix::openStore() );
-  nix::ref<nix::EvalState> state = nix::make_ref<nix::EvalState>(
-    std::list<std::string> {}, store, store
+  nix::EvalState state( std::list<std::string> {}, store, store );
+  state.repair = nix::NoRepair;
+  nix::flake::LockedFlake flake = nix::flake::lockFlake(
+    state
+  , nix::parseFlakeRef( "github:NixOS/nixpkgs" )
+  , (nix::flake::LockFlags) { .updateLockFile = false, .writeLockFile = false }
   );
-  state->repair = nix::NoRepair;
-  std::shared_ptr<nix::flake::LockedFlake> flake =
-    std::make_shared<nix::flake::LockedFlake>(
-      nix::flake::lockFlake(
-        * state
-      , nix::parseFlakeRef( "github:NixOS/nixpkgs" )
-      , (nix::flake::LockFlags) {
-            .updateLockFile = false
-          , .writeLockFile = false
-        }
-      )
-    );
   /* End boilerplate */
 
 

@@ -39,29 +39,29 @@ class AttrSetIterClosure {
 
   private:
 
-    std::shared_ptr<nix::flake::LockedFlake> _flake = nullptr;
-    std::shared_ptr<nix::EvalState>          _state = nullptr;
-    std::list<std::string>                   _path  = {};
-    MaybeCursor                              _cur   = nullptr;
+    const nix::flake::LockedFlake & _flake;
+          nix::EvalState          & _state;
+          std::list<std::string>    _path  = {};
+          MaybeCursor               _cur   = nullptr;
 
       nix::ref<nix::eval_cache::EvalCache>
     openEvalCache() const
     {
-      nix::flake::Fingerprint fingerprint = this->getFingerprint();
+      nix::flake::Fingerprint fingerprint = this->_flake.getFingerprint();
       return nix::make_ref<nix::eval_cache::EvalCache>(
         ( nix::evalSettings.useEvalCache && nix::evalSettings.pureEval )
         ? std::optional { std::cref( fingerprint ) }
         : std::nullopt
-      , * this->_state
+      , this->_state
       , [&]()
         {
-          nix::Value * vFlake = this->_state->allocValue();
-          nix::flake::callFlake( * this->_state, * this->_flake, * vFlake );
-          this->_state->forceAttrs(
+          nix::Value * vFlake = this->_state.allocValue();
+          nix::flake::callFlake( this->_state, this->_flake, * vFlake );
+          this->_state.forceAttrs(
             * vFlake, nix::noPos, "while parsing cached flake data"
           );
           nix::Attr * aOutputs = vFlake->attrs->get(
-            this->_state->symbols.create( "outputs" )
+            this->_state.symbols.create( "outputs" )
           );
           assert( aOutputs != nullptr );
           return aOutputs->value;
@@ -75,15 +75,13 @@ class AttrSetIterClosure {
   public:
 
     AttrSetIterClosure(
-      nix::ref<nix::EvalState>                 state
-    , std::shared_ptr<nix::flake::LockedFlake> flake
-    , Cursor                                   cur
-    ) : _state( (std::shared_ptr<nix::EvalState>) state )
-      , _flake( flake )
-      , _cur( (MaybeCursor) cur )
+            nix::EvalState          & state
+    , const nix::flake::LockedFlake & flake
+    , Cursor                          cur
+    ) : _state( state ), _flake( flake ), _cur( (MaybeCursor) cur )
     {
       for ( const auto & str :
-              this->_state->symbols.resolve( cur->getAttrPath() )
+              this->_state.symbols.resolve( cur->getAttrPath() )
           )
         {
           this->_path.emplace_back( str );
@@ -93,12 +91,10 @@ class AttrSetIterClosure {
 /* -------------------------------------------------------------------------- */
 
     AttrSetIterClosure(
-            nix::ref<nix::EvalState>                   state
-    ,       std::shared_ptr<nix::flake::LockedFlake>   flake
-    , const std::list<std::string>                   & path
-    ) : _state( (std::shared_ptr<nix::EvalState>) state )
-      , _flake( flake )
-      , _path( path )
+            nix::EvalState          & state
+    , const nix::flake::LockedFlake & flake
+    , const std::list<std::string>  & path
+    ) : _state( state ), _flake( flake ), _path( path )
     {
       nix::ref<nix::eval_cache::EvalCache> cache = this->openEvalCache();
       this->_cur = (MaybeCursor) cache->getRoot();
@@ -111,22 +107,7 @@ class AttrSetIterClosure {
 
 /* -------------------------------------------------------------------------- */
 
-      std::shared_ptr<nix::flake::LockedFlake>
-    getFlake() const
-    {
-      return this->_flake;
-    }
-
-      nix::flake::Fingerprint
-    getFingerprint() const
-    {
-      return this->_flake->getFingerprint();
-    }
-
-      nix::FlakeRef
-    getRef() const {
-      return this->_flake->flake.lockedRef;
-    }
+    nix::FlakeRef getRef() const { return this->_flake.flake.lockedRef; }
 
       std::list<std::string_view>
     getPath() const
@@ -228,7 +209,7 @@ class AttrSetIterClosure {
         operator*()
         {
           std::list<std::string_view> key = this->_cl.getPath();
-          key.emplace_back( this->_cl._state->symbols[this->_attr] );
+          key.emplace_back( this->_cl._state.symbols[this->_attr] );
           return std::make_pair( std::move( key ), this->_ptr );
         }
 
