@@ -39,15 +39,14 @@ class AttrSetIterClosure {
 
   private:
 
-    const nix::flake::LockedFlake & _flake;
           nix::EvalState          & _state;
           std::list<std::string>    _path  = {};
           MaybeCursor               _cur   = nullptr;
 
       nix::ref<nix::eval_cache::EvalCache>
-    openEvalCache() const
+    openEvalCache( const nix::flake::LockedFlake & flake ) const
     {
-      nix::flake::Fingerprint fingerprint = this->_flake.getFingerprint();
+      nix::flake::Fingerprint fingerprint = flake.getFingerprint();
       return nix::make_ref<nix::eval_cache::EvalCache>(
         ( nix::evalSettings.useEvalCache && nix::evalSettings.pureEval )
         ? std::optional { std::cref( fingerprint ) }
@@ -56,7 +55,7 @@ class AttrSetIterClosure {
       , [&]()
         {
           nix::Value * vFlake = this->_state.allocValue();
-          nix::flake::callFlake( this->_state, this->_flake, * vFlake );
+          nix::flake::callFlake( this->_state, flake, * vFlake );
           this->_state.forceAttrs(
             * vFlake, nix::noPos, "while parsing cached flake data"
           );
@@ -74,11 +73,8 @@ class AttrSetIterClosure {
 
   public:
 
-    AttrSetIterClosure(
-            nix::EvalState          & state
-    , const nix::flake::LockedFlake & flake
-    , Cursor                          cur
-    ) : _state( state ), _flake( flake ), _cur( (MaybeCursor) cur )
+    AttrSetIterClosure( nix::EvalState & state, Cursor cur )
+      : _state( state ), _cur( (MaybeCursor) cur )
     {
       for ( const auto & str :
               this->_state.symbols.resolve( cur->getAttrPath() )
@@ -94,9 +90,9 @@ class AttrSetIterClosure {
             nix::EvalState          & state
     , const nix::flake::LockedFlake & flake
     , const std::list<std::string>  & path
-    ) : _state( state ), _flake( flake ), _path( path )
+    ) : _state( state ), _path( path )
     {
-      nix::ref<nix::eval_cache::EvalCache> cache = this->openEvalCache();
+      nix::ref<nix::eval_cache::EvalCache> cache = this->openEvalCache( flake );
       this->_cur = (MaybeCursor) cache->getRoot();
       for ( const auto & p : this->_path )
         {
@@ -106,8 +102,6 @@ class AttrSetIterClosure {
 
 
 /* -------------------------------------------------------------------------- */
-
-    nix::FlakeRef getRef() const { return this->_flake.flake.lockedRef; }
 
       std::list<std::string_view>
     getPath() const
