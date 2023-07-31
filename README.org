@@ -1,0 +1,91 @@
+#+TITLE: nix-cpp
+
+Extensions and utilities for the =nix= C++ APIs.
+
+* Extensions
+
+** Attribute Set Iterator
+
+[[./include/attrs-iter.hh][attrs-iter.hh]] provides a fancier iterator for
+=nix::eval_cache::AttrCursor= attribute sets.
+
+This allows you to iterate over =( attrPath, Cursor )= pairs.
+These are typed as =std::pair= of =std::list<std::string_view>= and
+=std::shared_ptr<nix::eval_cache::AttrCursor>= parts.
+
+
+*** Examples
+
+#+BEGIN_SRC c++
+#include <stdlib.h>
+#include <iostream>
+#include <string>
+#include <list>
+#include <nix/shared.hh>
+#include <nix/eval.hh>
+#include <nix/eval-cache.hh>
+#include <nix/flake/flake.hh>
+#include <nix/store-api.hh>
+#include "attrs-iter.hh"
+
+  int
+main( int argc, char * argv[], char ** envp )
+{
+  /* Boilerplate */
+  nix::initNix();
+  nix::initGC();
+  nix::evalSettings.pureEval     = true;
+  nix::evalSettings.useEvalCache = true;
+  nix::ref<nix::Store>     store = nix::ref<nix::Store>( nix::openStore() );
+  nix::ref<nix::EvalState> state = nix::make_ref<nix::EvalState>(
+    std::list<std::string> {}, store, store
+  );
+  state->repair = nix::NoRepair;
+  std::shared_ptr<nix::flake::LockedFlake> flake =
+    std::make_shared<nix::flake::LockedFlake>(
+      nix::flake::lockFlake(
+        ,* state
+      , nix::parseFlakeRef( "github:NixOS/nixpkgs" )
+      , (nix::flake::LockFlags) {
+            .updateLockFile = false
+          , .writeLockFile = false
+        }
+      )
+    );
+  /* End boilerplate */
+
+
+  /* Use our iterator. */
+
+  std::list<std::string> path = {
+    "legacyPackages", "x86_64-linux", "hello", "meta"
+  };
+  nixcpp::util::AttrSetIterClosure helloMeta( state, flake, path );
+  /* Try printing all key/values in `hello.meta'. */
+  for ( const auto & [path, cursor] : helloMeta )
+    {
+      try
+        {
+          std::string str = cursor->getString();
+          std::cout << path.back() << ": " << str << std::endl;
+        }
+      catch( ... ) {}
+    }
+}
+
+/* ==>
+
+changelog: https://git.savannah.gnu.org/cgit/hello.git/plain/NEWS?h=v2.12.1
+description: A program that produces a familiar, friendly greeting
+homepage: https://www.gnu.org/software/hello/manual/
+longDescription: GNU Hello is a program that prints "Hello, world!" when you run it.
+It is fully customizable.
+
+name: hello-2.12.1
+position: /nix/store/m7r502r8w3f0yvfxxplsbxsf4g344d3y-source/pkgs/applications/misc/hello/default.nix:34
+*/
+#+END_SRC
+
+In the example above we create an =AttrSetIterClosure= from a list of strings
+representing an attribute path, however you can also pass in a
+=nix::ref<nix::eval_cache::AttrCursor>= directly if desired.

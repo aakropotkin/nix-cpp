@@ -1,0 +1,11 @@
+prefix=@PREFIX@
+includedir=${prefix}/include
+
+# NOTE: May need to add boost.
+
+Name: nix-cpp
+Description: Nix C++ Extensions
+Version: @VERSION@
+Requires: nix-cmd nix-expr nix-main nix-store
+Cflags: -I${includedir}
+Libs: -lnixutil
